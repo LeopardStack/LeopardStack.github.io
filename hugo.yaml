@@ -1,0 +1,93 @@
+baseURL: "https://LeopardStack.github.io/"
+title: "Leopard Notes"
+locale: zh-cn
+defaultContentLanguage: zh-cn
+theme: PaperMod
+timeZone: Asia/Shanghai
+
+# 生成 sitemap 与 robots.txt
+enableRobotsTXT: true
+
+# 分页
+pagination:
+  pagerSize: 10
+
+# 允许内容中直接写 HTML（嵌入视频等需要）
+markup:
+  goldmark:
+    renderer:
+      unsafe: true
+  highlight:
+    codeFences: true
+    guessSyntax: true
+    lineNos: true
+    style: monokai
+  tableOfContents:
+    startLevel: 2
+    endLevel: 4
+
+params:
+  env: production
+  author: "Leopard"
+  description: "科技与人文的交汇处"
+  keywords: [博客, 技术, 人文, 读书笔记]
+  DateFormat: "2006-01-02"
+  defaultTheme: auto # 支持亮色/暗色自动切换
+  ShowReadingTime: true
+  ShowShareButtons: false
+  ShowPostNavLinks: true
+  ShowBreadCrumbs: true
+  ShowCodeCopyButtons: true # 技术文章必备
+  ShowWordCount: true
+  ShowRssButtonInSectionTermList: true
+  ShowToc: true # 文章目录
+  TocOpen: false
+  disableSpecial1stPost: false
+  disableScrollToTop: false
+  comments: false
+  hidemeta: false
+  hideSummary: false
+
+  homeInfoParams:
+    Title: "你好 👋"
+    Content: "这里记录技术学习与人文思考"
+
+  socialIcons:
+    - name: github
+      url: "https://github.com/LeopardStack"
+    - name: rss
+      url: "/index.xml"
+
+  # 站内搜索（Fuse.js）配置
+  fuseOpts:
+    isCaseSensitive: false
+    shouldSort: true
+    location: 0
+    distance: 1000
+    threshold: 0.4
+    minMatchCharLength: 2
+    keys: ["title", "permalink", "summary", "content"]
+
+menu:
+  main:
+    - name: 技术笔记
+      url: /categories/tech/
+      weight: 1
+    - name: 人文随笔
+      url: /categories/humanities/
+      weight: 2
+    - name: 归档
+      url: /archives/
+      weight: 3
+    - name: 搜索
+      url: /search/
+      weight: 4
+    - name: 关于
+      url: /about/
+      weight: 5
+
+outputs:
+  home:
+    - HTML
+    - RSS
+    - JSON # 搜索功能需要

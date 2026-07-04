@@ -1,0 +1,12 @@
+# Hugo 构建产物
+public/
+resources/
+.hugo_build.lock
+
+# IDE
+.idea/
+.vscode/
+
+# 系统文件
+.DS_Store
+Thumbs.db
