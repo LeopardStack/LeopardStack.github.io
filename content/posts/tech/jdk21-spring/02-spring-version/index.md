@@ -1,7 +1,7 @@
 ---
 title: "JDK21 与 Spring 实战（2）：Spring 版本选择与第一个 Web 项目"
 date: 2026-07-04T23:00:00+08:00
-draft: true   # 预览确认后改为 false 发布
+draft: false
 summary: "Spring、Spring Boot、Spring Cloud 是什么关系？版本怎么选？15 分钟跑起你的第一个 Web 接口，并亲眼验证虚拟线程在工作。"
 categories: ["tech"]
 tags: ["Java", "Spring Boot", "虚拟线程"]

@@ -1,7 +1,7 @@
 ---
 title: "JDK21 与 Spring 实战（1）：JDK21 核心特性总览"
 date: 2026-07-04T22:00:00+08:00
-draft: true   # 预览确认后改为 false 发布
+draft: false
 summary: "系列开篇：JDK 是什么、为什么选 21、虚拟线程到底解决了什么问题——用比喻和代码带你走马观花一遍。"
 categories: ["tech"]
 tags: ["Java", "JDK21", "虚拟线程"]
