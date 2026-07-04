@@ -1,7 +1,7 @@
 ---
 title: "Redis Deep Dive (2): SDS, and Why Redis Does Not Use Plain C Strings"
 date: 2026-07-04T00:10:00+08:00
-draft: true
+draft: false
 summary: "A source-level walkthrough of SDS: how it stores length and capacity, why length lookup is O(1), how it remains C-string compatible, and how it reduces reallocations."
 categories: ["tech"]
 tags: ["Redis", "SDS", "Source Code", "C"]

@@ -1,7 +1,7 @@
 ---
 title: "Redis Deep Dive (1): Understanding the Source Through One GET Request"
 date: 2026-07-04T00:00:00+08:00
-draft: true
+draft: false
 summary: "The opening post of the Redis source-code series: follow one GET request to build a map of the event loop, clients, command table, database dictionary, and reply path."
 categories: ["tech"]
 tags: ["Redis", "Source Code", "Database", "C"]

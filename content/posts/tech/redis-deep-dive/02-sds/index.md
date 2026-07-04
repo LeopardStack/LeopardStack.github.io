@@ -1,7 +1,7 @@
 ---
 title: "Redis 深度解析（二）：SDS，Redis 为什么不用 C 字符串"
 date: 2026-07-04T00:10:00+08:00
-draft: true
+draft: false
 summary: "从源码角度拆解 SDS：它如何保存长度和容量，为什么能 O(1) 取长度，怎样兼容 C 字符串，又如何避免频繁扩容。"
 categories: ["tech"]
 tags: ["Redis", "SDS", "源码", "C"]

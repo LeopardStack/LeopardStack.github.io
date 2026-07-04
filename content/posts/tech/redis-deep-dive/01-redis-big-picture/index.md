@@ -1,7 +1,7 @@
 ---
 title: "Redis 深度解析（一）：从一次 GET 请求看懂源码全景"
 date: 2026-07-04T00:00:00+08:00
-draft: true
+draft: false
 summary: "Redis 源码系列开篇：先不急着钻细节，从一次 GET 请求的路径出发，建立事件循环、客户端、命令表、数据库字典和响应写回的整体地图。"
 categories: ["tech"]
 tags: ["Redis", "源码", "数据库", "C"]
