@@ -1,7 +1,7 @@
-baseURL: "https://LeopardStack.github.io/"
+﻿baseURL: "https://LeopardStack.github.io/"
 title: "Leopard Notes"
-locale: zh-cn
 defaultContentLanguage: zh-cn
+defaultContentLanguageInSubdir: false
 theme: PaperMod
 timeZone: Asia/Shanghai
 
@@ -11,6 +11,60 @@ enableRobotsTXT: true
 # 分页
 pagination:
   pagerSize: 10
+
+# 多语言：中文站在 / ，英文站在 /en/ ；文章有 index.en.md 才会出现在英文站
+languages:
+  zh-cn:
+    languageName: "中文"
+    locale: zh-cn
+    weight: 1
+    params:
+      homeInfoParams:
+        Title: "你好 👋"
+        Content: "这里记录技术学习与人文思考"
+    menu:
+      main:
+        - name: 技术笔记
+          url: /categories/tech/
+          weight: 1
+        - name: 人文随笔
+          url: /categories/humanities/
+          weight: 2
+        - name: 归档
+          url: /archives/
+          weight: 3
+        - name: 搜索
+          url: /search/
+          weight: 4
+        - name: 关于
+          url: /about/
+          weight: 5
+  en:
+    languageName: "English"
+    locale: en
+    weight: 2
+    params:
+      description: "Where technology meets the humanities"
+      homeInfoParams:
+        Title: "Hi there 👋"
+        Content: "Notes on technology and the humanities"
+    menu:
+      main:
+        - name: Tech
+          url: /categories/tech/
+          weight: 1
+        - name: Humanities
+          url: /categories/humanities/
+          weight: 2
+        - name: Archive
+          url: /archives/
+          weight: 3
+        - name: Search
+          url: /search/
+          weight: 4
+        - name: About
+          url: /about/
+          weight: 5
 
 # 分类法：categories(栏目) / tags(标签) / series(系列连载)
 taxonomies:
@@ -50,13 +104,17 @@ params:
   TocOpen: false
   disableSpecial1stPost: false
   disableScrollToTop: false
-  comments: false
   hidemeta: false
   hideSummary: false
 
-  homeInfoParams:
-    Title: "你好 👋"
-    Content: "这里记录技术学习与人文思考"
+  # 评论（giscus，基于 GitHub Discussions）
+  # 启用步骤：仓库开启 Discussions → 安装 giscus App → 在 giscus.app 获取两个 ID 填入下方
+  comments: true
+  giscus:
+    repo: "LeopardStack/LeopardStack.github.io"
+    repoID: ""      # 【待填】在 https://giscus.app 生成
+    category: "Announcements"
+    categoryID: ""  # 【待填】在 https://giscus.app 生成
 
   socialIcons:
     - name: github
@@ -73,24 +131,6 @@ params:
     threshold: 0.4
     minMatchCharLength: 2
     keys: ["title", "permalink", "summary", "content"]
-
-menu:
-  main:
-    - name: 技术笔记
-      url: /categories/tech/
-      weight: 1
-    - name: 人文随笔
-      url: /categories/humanities/
-      weight: 2
-    - name: 归档
-      url: /archives/
-      weight: 3
-    - name: 搜索
-      url: /search/
-      weight: 4
-    - name: 关于
-      url: /about/
-      weight: 5
 
 outputs:
   home:

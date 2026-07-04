@@ -1,0 +1,23 @@
+{{- /* giscus 评论 + 表情点赞。hugo.yaml 里 params.giscus.repoID/categoryID 填好后自动出现 */ -}}
+{{- with site.Params.giscus }}
+{{- if and .repoID .categoryID }}
+<div class="giscus-wrapper" style="margin-top: 36px;">
+  <script src="https://giscus.app/client.js"
+          data-repo="{{ .repo }}"
+          data-repo-id="{{ .repoID }}"
+          data-category="{{ .category | default "Announcements" }}"
+          data-category-id="{{ .categoryID }}"
+          data-mapping="pathname"
+          data-strict="0"
+          data-reactions-enabled="1"
+          data-emit-metadata="0"
+          data-input-position="top"
+          data-theme="preferred_color_scheme"
+          data-lang="{{ if eq $.Language.Lang "en" }}en{{ else }}zh-CN{{ end }}"
+          data-loading="lazy"
+          crossorigin="anonymous"
+          async>
+  </script>
+</div>
+{{- end }}
+{{- end }}

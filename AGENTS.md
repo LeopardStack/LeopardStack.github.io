@@ -51,6 +51,16 @@ cover:                             # 可选
 - 人文随笔：散文风格，克制使用小标题和列表，不写空话套话
 - 引用外部图片/数据需注明来源
 
+## 双语
+
+- 站点双语：中文（默认，/）+ 英文（/en/）。给文章出英文版 = 在同一文件夹加 index.en.md，
+  图片共用 images/；未翻译的文章只出现在中文站，这是正常现象
+- 英文版 front matter 结构与中文版一致（title/summary/tags 用英文），date 保持相同
+
+## 评论
+
+- giscus（GitHub Discussions），配置在 hugo.yaml params.giscus；单篇关闭评论用 comments: false
+
 ## 验证与发布
 
 - 写完后运行 `hugo`（或 `hugo server -D` 预览）确认构建无 ERROR

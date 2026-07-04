@@ -37,6 +37,7 @@
   .series-item-date { color: var(--secondary); font-size: 13px; white-space: nowrap; }
 </style>
 
+{{- $isEn := eq .Language.Lang "en" }}
 {{- $catPages := .Pages }}
 {{- $inSeries := slice }}
 {{- $hasSeries := false }}
@@ -45,7 +46,7 @@
 {{- $inter := intersect $catPages $wp.Pages }}
 {{- if $inter }}
 {{- if not $hasSeries }}
-<h2 class="section-label">📚 系列连载</h2>
+<h2 class="section-label">📚 {{ if $isEn }}Series{{ else }}系列连载{{ end }}</h2>
 {{- $hasSeries = true }}
 {{- end }}
 {{- $inSeries = union $inSeries $inter }}
@@ -53,7 +54,7 @@
 <div class="series-group">
   <h3 class="series-title">
     {{- with $termPage }}<a href="{{ .Permalink }}">{{ .Title }}</a>{{- else }}{{ $name }}{{- end }}
-    <span class="series-count">共 {{ len $inter }} 篇 · 按阅读顺序排列</span>
+    <span class="series-count">{{ if $isEn }}{{ len $inter }} posts, in reading order{{ else }}共 {{ len $inter }} 篇 · 按阅读顺序排列{{ end }}</span>
   </h3>
   <ol>
     {{- range sort $inter "Date" "asc" }}
@@ -72,7 +73,7 @@
 
 {{- if $standalone }}
 {{- if $hasSeries }}
-<h2 class="section-label">✏️ 独立文章</h2>
+<h2 class="section-label">✏️ {{ if $isEn }}Standalone posts{{ else }}独立文章{{ end }}</h2>
 {{- end }}
 {{- range $standalone }}
 <article class="post-entry tag-entry">
