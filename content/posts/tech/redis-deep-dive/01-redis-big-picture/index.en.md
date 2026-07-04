@@ -2,13 +2,14 @@
 title: "Redis Deep Dive (1): Understanding the Source Through One GET Request"
 date: 2026-07-04T00:00:00+08:00
 draft: false
-summary: "The opening post of the Redis source-code series: follow one GET request to build a map of the event loop, clients, command table, database dictionary, and reply path."
+summary: "Based on the Redis 7.2.14 source tree, follow one GET request to build a concrete map of the event loop, clients, command table, database dictionary, and reply path."
 categories: ["tech"]
 tags: ["Redis", "Source Code", "Database", "C"]
 series: ["Redis Deep Dive"]
 ---
 
 > **This is part 1 of the "Redis Deep Dive" series.**
+> This article is based on the **Redis 7.2.14 official source tree**. My local copy is at `F:\MyProjects\goodProjectSourceCodeLearning\redis-7.2.14`.
 > The series will use dozens of posts to dissect Redis: SDS, dict, the event loop, networking, command execution, persistence, replication, Sentinel, Cluster, and memory eviction.
 > This opening post starts with the most useful question: when a client sends `GET name`, which pieces of Redis source code does it pass through?
 
@@ -17,12 +18,71 @@ series: ["Redis Deep Dive"]
 Redis is a great project for learning real systems programming. It is not a toy, yet the core is still readable.
 Inside it you can study network IO, event loops, data structures, memory management, persistence, replication, and clustering in a production-grade codebase.
 
-Redis changes across versions, so this series follows two rules:
+Redis changes across versions, so this series starts with a fixed reading baseline:
+
+```text
+Redis: 7.2.14
+Source: https://download.redis.io/releases/redis-7.2.14.tar.gz
+Local: F:\MyProjects\goodProjectSourceCodeLearning\redis-7.2.14
+Build VM: Ubuntu 22.04, Linux 5.15, x86_64
+Remote path: /home/admin/openSourceCodeLearning/redis-7.2.14
+```
+
+The official `README.md` says Redis can be compiled and used on Linux, OSX, OpenBSD, NetBSD, and FreeBSD,
+with `make` as the normal build entry. I also built this exact tarball on an Ubuntu VM:
+
+```bash
+sudo apt-get update
+sudo apt-get install -y build-essential tcl
+
+cd /home/admin/openSourceCodeLearning
+tar -xzf redis-7.2.14.tar.gz
+cd redis-7.2.14
+make -j$(nproc)
+```
+
+The build produced:
+
+```text
+src/redis-server     16M
+src/redis-cli       7.1M
+src/redis-benchmark 6.8M
+```
+
+Then I ran a minimal smoke test:
+
+```bash
+src/redis-server --version
+src/redis-cli --version
+src/redis-server --port 6380 --daemonize yes --dir /tmp --save "" --appendonly no
+src/redis-cli -p 6380 ping
+src/redis-cli -p 6380 set name redis-source-reading
+src/redis-cli -p 6380 get name
+src/redis-cli -p 6380 shutdown nosave
+```
+
+Key output:
+
+```text
+Redis server v=7.2.14 malloc=jemalloc-5.3.0 bits=64
+redis-cli 7.2.14
+PONG
+OK
+redis-source-reading
+```
+
+The first startup also printed the common Linux warning that `vm.overcommit_memory` is disabled.
+It does not affect this small `PING/SET/GET` check, but it matters for background save, replication, and more complete testing.
+
+I also tried `make test`, but the full test run was still not finished after 10 minutes, so I do not count it as passed here;
+the test processes were cleaned up. The rest of this article is based on a source tree that compiles, starts, and handles basic commands.
+
+The series follows two rules:
 
 1. **Explain stable mechanisms first**: SDS, dict, the event loop, and command execution are the skeleton;
 2. **Treat concrete function names as source-code anchors**: local details may move between versions, so always verify against the tag you check out.
 
-When a later post needs line-by-line reading, it will pin a specific source version. This article is only a map.
+Unless a later post explicitly switches versions, assume Redis 7.2.14.
 
 ## 2. Why Redis Is Fast: Not Just "Single Threaded"
 
@@ -55,7 +115,7 @@ The speed comes from several choices working together:
 
 So do not stop at the phrase "single threaded". Follow how one request is received, parsed, executed, and written back.
 
-## 3. Where One GET Request Goes
+## 3. Where One GET Request Goes: Start With Real Source Locations
 
 Suppose the client sends:
 
@@ -63,7 +123,27 @@ Suppose the client sends:
 GET name
 ```
 
-To Redis, this is network input first, not just a line of text. The high-level path looks like this:
+Start by locating the code instead of guessing from memory:
+
+```bash
+cd redis-7.2.14
+grep -R "void getCommand" -n src
+grep -R "lookupKeyReadOrReply" -n src/t_string.c src/db.c
+grep -R "populateCommandTable" -n src/server.c
+```
+
+In Redis 7.2.14, the useful anchors are:
+
+| File | Location | Role |
+|---|---:|---|
+| `src/commands/get.json` | `"function": "getCommand"` | GET metadata: arity, flags, key position |
+| `src/server.c` | `populateCommandTable()` | Loads the generated command table into `server.commands` |
+| `src/server.c` | `processCommand()` | Looks up, validates, and dispatches commands from `argv/argc` |
+| `src/t_string.c` | `getCommand()` | GET command entry point |
+| `src/t_string.c` | `getGenericCommand()` | The shared implementation of GET-like reads |
+| `src/db.c` | `lookupKeyReadOrReply()` | Looks up a key and writes the null reply if missing |
+
+To Redis, `GET name` is network input first, not just a line of text. The high-level path looks like this:
 
 ```mermaid
 sequenceDiagram
@@ -78,9 +158,9 @@ sequenceDiagram
     AE->>Net: call read event handler
     Net->>Net: read into query buffer
     Net->>Server: parse RESP and process command
-    Server->>Server: find GET in command table
-    Server->>Cmd: execute getCommand
-    Cmd->>DB: look up key
+    Server->>Server: lookupCommand(c->argv,c->argc)
+    Server->>Cmd: call() invokes getCommand
+    Cmd->>DB: getGenericCommand looks up key
     DB-->>Cmd: return redisObject or null
     Cmd-->>Net: append response to reply buffer
     Net-->>Client: send response when socket is writable
@@ -126,7 +206,15 @@ Most of this lives in `networking.c`.
 
 ## 6. The Command Table: Turning Names Into Function Calls
 
-Internally Redis has a command table. Conceptually:
+In Redis 7.2.14, command metadata lives under `src/commands/*.json`.
+For `GET`, `src/commands/get.json` says: `arity = 2`, `function = getCommand`,
+`command_flags = READONLY, FAST`, and the key is argument 1.
+
+Those JSON files generate a static command table. Then `populateCommandTable()` in `server.c`
+loads it into two dictionaries: `server.commands` and `server.orig_commands`.
+The second one preserves original command names even if `rename-command` changes the public command table.
+
+So the command table is not an imagined abstraction. Conceptually:
 
 ```c
 "get" -> getCommand
@@ -142,6 +230,8 @@ The command name from the client is normalized and looked up in this table. Once
 - whether it is allowed in special states such as loading, scripting, or cluster mode.
 
 This matters because Redis command execution is not a giant chain of `if else` checks. It is a dispatch system with metadata, validation, and function pointers.
+Inside `processCommand()`, Redis calls `lookupCommand(c->argv,c->argc)`, then checks existence, arity, permissions,
+cluster state, read-only state, and more before `call()` enters the concrete command function.
 
 Later posts will break down command flags, ACL, key-position analysis, and the execution framework.
 
@@ -154,7 +244,27 @@ key -> value
 key -> expire time
 ```
 
-The first stores real data. The second stores expiration timestamps. Executing `GET name` roughly means:
+The first stores real data. The second stores expiration timestamps. In Redis 7.2.14, the actual `GET` call chain is short:
+
+```text
+getCommand
+  -> getGenericCommand
+      -> lookupKeyReadOrReply
+          -> lookupKeyRead
+              -> lookupKey
+```
+
+`getGenericCommand()` in `src/t_string.c` does three things:
+
+1. Calls `lookupKeyReadOrReply(c, c->argv[1], shared.null[c->resp])`;
+2. If found, validates the value type with `checkType(c, o, OBJ_STRING)`;
+3. Writes the value into the reply with `addReplyBulk(c, o)`.
+
+Then `lookupKeyReadOrReply()` in `src/db.c` is only a thin wrapper: it calls `lookupKeyRead()`,
+and if no object is returned, it writes the provided null reply. The deeper `lookupKey()` handles expiration,
+last-access updates, hit/miss statistics, and related side effects.
+
+Conceptually, executing `GET name` means:
 
 1. Check whether the key is expired and delete it if needed;
 2. Look up the value in the database dictionary;

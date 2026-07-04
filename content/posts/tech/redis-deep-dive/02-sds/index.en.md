@@ -2,7 +2,7 @@
 title: "Redis Deep Dive (2): SDS, and Why Redis Does Not Use Plain C Strings"
 date: 2026-07-04T00:10:00+08:00
 draft: false
-summary: "A source-level walkthrough of SDS: how it stores length and capacity, why length lookup is O(1), how it remains C-string compatible, and how it reduces reallocations."
+summary: "A Redis 7.2.14 source-level walkthrough of SDS: how it stores length and capacity, why length lookup is O(1), how it remains C-string compatible, and how it reduces reallocations."
 categories: ["tech"]
 tags: ["Redis", "SDS", "Source Code", "C"]
 series: ["Redis Deep Dive"]
@@ -11,13 +11,36 @@ series: ["Redis Deep Dive"]
 > **This is part 2 of the "Redis Deep Dive" series.**
 > In the previous post, we used a `GET` request to build a source-code map of Redis.
 > Now we zoom into the first foundational structure: SDS, Redis' Simple Dynamic String.
+> This article is based on the **Redis 7.2.14 official source tree**, especially `src/sds.h` and `src/sds.c`.
 
 ## 1. Why Start With SDS
 
 Redis is a key-value database, and keys are most often strings.
 If the string representation is unclear, dict, objects, and command execution will all feel blurry later.
 
-SDS stands for Simple Dynamic String. It solves several practical problems of C strings:
+SDS stands for Simple Dynamic String. In Redis 7.2.14, the entry points are clear:
+
+```text
+src/sds.h  -> type definitions, header layout, inline helpers such as sdslen/sdsavail
+src/sds.c  -> creation, growth, concatenation, freeing
+```
+
+When building on the Ubuntu VM with `make -j$(nproc)`, the Redis source files are compiled one by one.
+The build output includes:
+
+```text
+CC sds.o
+CC t_string.o
+CC db.o
+CC networking.o
+LINK redis-server
+LINK redis-cli
+```
+
+After the build, `src/redis-server --version` reports `7.2.14`, and a 6380-port smoke test passed
+`PING/SET/GET`. So the SDS code below is not an isolated file; it is part of a source tree that was compiled and actually run.
+
+It solves several practical problems of C strings:
 
 - `strlen()` scans until `\0`, so length lookup is O(n);
 - C strings use `\0` as the terminator, which is awkward for binary data;
@@ -83,13 +106,20 @@ The pointer returned to the caller points at the actual byte buffer:
 +--------+----------+-------------------+----+
 ```
 
-But before `buf`, Redis stores a header containing:
+But before `buf`, Redis stores a header. In `src/sds.h`, the public type is literally:
+
+```c
+typedef char *sds;
+```
+
+So externally SDS is still `char *`. The hidden header contains:
 
 - `len`: used length;
 - `alloc`: allocated capacity;
 - `flags`: header type.
 
-So `sdslen(s)` does not scan the bytes. It walks back from `s` to find the header and reads `len`.
+So `sdslen(s)` does not scan the bytes. It reads the flags byte at `s[-1]`,
+determines the header type, walks back from `s`, and reads `len`.
 
 That is the key design: **externally compatible with C strings, internally backed by metadata**.
 
@@ -102,7 +132,7 @@ SDS chooses different header sizes according to the string length:
 
 | Header type | Suitable range | Purpose |
 |---|---|---|
-| `sdshdr5` | Tiny strings | Minimize header overhead |
+| `sdshdr5` | Tiny strings | Stores length in the upper 5 bits of flags; the source comment says the struct itself is not really used |
 | `sdshdr8` | Short strings | Store length and capacity in 8-bit fields |
 | `sdshdr16` | Medium strings | Use 16-bit fields |
 | `sdshdr32` | Large strings | Use 32-bit fields |
@@ -119,7 +149,9 @@ struct sdshdr8 {
 };
 ```
 
-The real source uses packed layouts to avoid compiler padding. That detail shows how much Redis cares about memory density.
+The real source uses `__attribute__ ((__packed__))` on these structs to avoid compiler padding.
+One detail matters: the `sds.h` comment says `sdshdr5 is never used`; it documents the layout,
+while type-5 length is read directly from the flags byte.
 
 ## 5. How O(1) Length Lookup Works
 
@@ -129,7 +161,7 @@ Plain C string:
 strlen("redis"); // scan from r to \0
 ```
 
-SDS:
+Redis 7.2.14 SDS:
 
 ```c
 sdslen(s); // read header.len directly
@@ -143,6 +175,9 @@ size_t sdslen(const sds s) {
     return header->len;
 }
 ```
+
+The real implementation is in `src/sds.h`: `sdslen()` is `static inline`.
+It reads `s[-1]`, switches on `SDS_TYPE_MASK`, then returns the corresponding header's `len`.
 
 The complexity changes from O(n) to O(1). This matters because Redis repeatedly reads key length, value length, and protocol argument length on hot paths.
 
@@ -185,6 +220,14 @@ SDS checks available space:
 - If there is enough, write directly;
 - If not, reallocate and reserve extra room.
 
+In Redis 7.2.14, the public `sdsMakeRoomFor()` is a thin wrapper; the real logic is in `_sdsMakeRoomFor()`:
+
+- first call `sdsavail(s)` and return immediately if there is enough free space;
+- otherwise compute `len + addlen`;
+- in greedy mode, double the capacity while the new length is below `SDS_MAX_PREALLOC`;
+- after that threshold, add `SDS_MAX_PREALLOC` extra bytes;
+- if the header type changes, allocate a new block, copy the bytes, and free the old header instead of using `realloc`.
+
 This trades a little extra memory for fewer `malloc/realloc` calls, which is ideal for Redis' frequent string operations.
 
 ## 8. Why Keep the Trailing \0
@@ -223,20 +266,20 @@ On your first pass through `sds.c`, focus on these functions before diving into 
 
 | Function | What to look for |
 |---|---|
-| `sdsnewlen` | How SDS is created and how the header type is selected |
-| `sdslen` | How length lookup stays O(1) |
+| `_sdsnewlen` / `sdsnewlen` | How SDS is created, how the header type is selected, and how `len/alloc/flags` are initialized |
+| `sdslen` | The inline helper in `src/sds.h`; how length lookup stays O(1) |
 | `sdsavail` | How remaining capacity is read |
-| `sdsMakeRoomFor` | Where growth strategy happens |
+| `_sdsMakeRoomFor` / `sdsMakeRoomFor` | Where growth strategy happens and how greedy preallocation works |
 | `sdscatlen` | How append ensures enough space |
-| `sdsfree` | Why freeing must locate the true header start |
+| `sdsfree` | Why freeing must use `sdsHdrSize(s[-1])` to locate the true header start |
 
 Suggested reading order:
 
 ```mermaid
 graph LR
-    A["sdsnewlen"] --> B["sdslen"]
+    A["_sdsnewlen / sdsnewlen"] --> B["sdslen"]
     B --> C["sdsavail"]
-    C --> D["sdsMakeRoomFor"]
+    C --> D["_sdsMakeRoomFor / sdsMakeRoomFor"]
     D --> E["sdscatlen"]
     E --> F["sdsfree"]
 ```
@@ -246,9 +289,9 @@ Understand the lifecycle first: create, read length, check capacity, grow, appen
 ## 11. Recap
 
 - C strings are lightweight, but length lookup, binary safety, and growth safety are poor fits for Redis hot paths;
-- SDS hides a header before `buf`, storing `len`, `alloc`, and `flags`;
+- SDS is externally `char *`, but hides a header before `buf`, storing `len`, `alloc`, and `flags`;
 - `sdslen()` is O(1) because it reads the header instead of scanning bytes;
 - SDS still keeps a trailing `\0`, so it remains compatible with C strings in suitable cases;
-- Multiple header types reduce memory waste for small strings.
+- Multiple header types reduce memory waste for small strings; `sdshdr5` should be read according to the source comment, with length encoded directly in the flags byte.
 
 **Next up** can be `dict`: why is a Redis database essentially a hash table, and how does incremental rehash avoid long pauses?
