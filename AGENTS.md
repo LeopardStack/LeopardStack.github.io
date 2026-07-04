@@ -37,6 +37,12 @@ cover:                             # 可选
 - B 站：`{{</* bilibili BV号 */>}}`（自定义 shortcode，见 layouts/shortcodes/bilibili.html）
 - YouTube：`{{</* youtube 视频ID */>}}`
 
+## 图表（图文并茂优先用这个）
+
+- 流程图/架构图/时序图直接写 ```mermaid 代码块，站点自动渲染
+  （render hook 见 layouts/_markup/render-codeblock-mermaid.html，脚本按需自动注入）
+- 需要截图/照片/示意图时用文字占位「（图：xxx）」，不要生成假图片
+
 ## 写作约定
 
 - 语言：简体中文；代码、专有名词保留英文
