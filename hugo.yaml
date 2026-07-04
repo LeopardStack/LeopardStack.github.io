@@ -112,9 +112,9 @@ params:
   comments: true
   giscus:
     repo: "LeopardStack/LeopardStack.github.io"
-    repoID: ""      # 【待填】在 https://giscus.app 生成
+    repoID: "R_kgDOTNh7Bw"
     category: "Announcements"
-    categoryID: ""  # 【待填】在 https://giscus.app 生成
+    categoryID: "DIC_kwDOTNh7B84DAfl-"
 
   socialIcons:
     - name: github
