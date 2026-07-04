@@ -1,6 +1,5 @@
 ---
 title: "About"
-url: "/about/"
 ShowToc: false
 ShowReadingTime: false
 ShowBreadCrumbs: false
