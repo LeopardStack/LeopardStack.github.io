@@ -1,218 +1,304 @@
 ---
-title: "Terraform + AWS from Zero to Production (1): Before Writing Code, Protect Your New AWS Account"
+title: "Terraform + AWS from Zero to Production (1): You Can Start Without an AWS Account"
 date: 2026-07-05T00:00:00+08:00
 draft: false
-summary: "Starting from a newly created AWS account, this post sets up the basic safety, cost, and mental-model guardrails before writing Terraform code."
+summary: "A gentler path for Terraform beginners: learn Terraform itself with official docs and local experiments first, then move into AWS."
 categories: ["tech"]
 tags: ["Terraform", "AWS", "IaC", "DevOps"]
 series: ["Terraform + AWS from Zero to Production"]
 ---
 
 > **This is part 1 of the "Terraform + AWS from Zero to Production" series.**
-> The series starts from a beginner's point of view: no assumed Terraform experience, and no assumed deep AWS background.
-> We will first cover account safety, cost control, and core concepts, then move into S3, IAM, VPC, EC2, modules, remote state, and CI/CD.
+> AWS will be the main hands-on cloud platform in this series, but an AWS account is not required on day one.
+> If you do not have a cloud account yet, you can first learn Terraform concepts locally, then move into AWS after `init`, `plan`, `apply`, `destroy`, providers, resources, and state feel familiar.
 
-When I first started learning Terraform, the obvious temptation was to install it, write a `.tf` file, and run `terraform apply` as soon as possible.
+My first version of this series started from a newly created AWS account.
 
-That temptation makes sense. Terraform feels powerful because a few lines of configuration can create real cloud infrastructure.
+That is useful for readers who already have AWS, but it raises the entry barrier for true beginners. Some readers may not have registered AWS yet. Some may not want to bind a credit card immediately. Some may simply worry about cost and permissions.
 
-But if you have just created a new AWS account, it is worth slowing down first. Cloud work is different from local development: a local mistake usually gives you an error; a cloud mistake can create a bill or expose permissions.
+So this opening post resets the direction:
 
-So this opening post does not start with code. It starts with three questions:
+- Terraform concepts can be learned without AWS;
+- AWS is still a good platform for real cloud practice later;
+- Official documentation should be part of the learning path from the beginning;
+- At every stage, we should know whether we are learning Terraform itself or a specific cloud provider.
 
-1. How do we avoid using the Root user for everyday work?
-2. How do we avoid unexpected cost while learning?
-3. How do we build a basic Terraform mental model before touching real resources?
+In other words, the series is still about **Terraform + AWS**, but the doorway should be friendly to people who do not have an AWS account yet.
 
-Once these are clear, the first Terraform configuration will feel much less mysterious.
+## 1. Separate Terraform from AWS First
 
-## 1. What This Series Is Trying to Solve
+Terraform is an Infrastructure as Code tool. You describe the desired state of your infrastructure in configuration files, and Terraform uses providers to call platform APIs to create, update, or delete resources.
 
-Terraform is an Infrastructure as Code tool.
+AWS is only one of many platforms Terraform can manage.
 
-The point is not merely to click fewer buttons in the cloud console. The deeper goal is to make infrastructure:
+Terraform can manage:
 
-- **Reproducible**: another machine or another person can create the same environment;
-- **Reviewable**: you can inspect what will be created, changed, or destroyed before execution;
-- **Versioned**: networks, servers, permissions, and storage can live in Git with application code;
-- **Recoverable**: a broken environment can be rebuilt from code and state, not from memory.
+- Cloud resources, such as AWS, Azure, and GCP;
+- Local or development resources, such as Docker containers;
+- SaaS resources, such as GitHub, Cloudflare, and Datadog;
+- Helper resources, such as random strings, TLS materials, and local files.
 
-These benefits do not appear automatically.
-
-Terraform has its own learning curve, especially around these topics:
-
-- HCL looks simple, but variables, types, expressions, and modules quickly become real design work;
-- `terraform.tfstate` is central, and Terraform is hard to understand without understanding state;
-- AWS permissions are detailed, and IAM mistakes usually mean either too little access or too much access;
-- Cloud resources cost money, so learning must include the habit of creating, verifying, and destroying resources;
-- Terraform changes real infrastructure, not a throwaway toy environment.
-
-That is why this series will follow a simple rhythm: set guardrails first, then move forward.
-
-## 2. Add Guardrails to a New AWS Account
-
-If you have just created an AWS account, I recommend finishing the following setup first. Not all of it needs to be managed by Terraform. In fact, the earliest account-safety settings are often better done in the console first.
-
-### 1. Enable MFA for the Root User
-
-When an AWS account is created, it starts with a Root user. This identity has the highest level of access in the account.
-
-You should not use the Root user for daily learning and operations. AWS recommends avoiding Root user access unless a task explicitly requires it, and enabling MFA for the Root user.
-
-My mental model is: the Root user is a vault key, not a daily access badge.
-
-Suggested actions:
-
-- Set a strong password;
-- Enable MFA, preferably with a recovery plan instead of depending on only one fragile device;
-- Do not create access keys for the Root user;
-- Keep account recovery channels such as email and phone number up to date;
-- Use IAM Identity Center, IAM roles, or a dedicated IAM user for daily work later.
-
-### 2. Create a Budget Alert
-
-For AWS learning, a budget alert is not decoration. It is a seatbelt.
-
-AWS Budgets can track cost and usage and notify you when thresholds are reached. For a personal learning account, the first budget can be very small, such as 1 USD, 5 USD, or whatever amount you are comfortable spending on experiments.
-
-A budget alert does not prevent all charges, but it gives you an early signal that something may have been left running, exceeded a free tier, or cost more than expected.
-
-Suggested actions:
-
-- Create a monthly cost budget;
-- Add several thresholds, such as 50%, 80%, and 100%;
-- Send notifications to an email address you actually check;
-- Review Billing and Cost Explorer after experiments;
-- Build the habit of running `terraform destroy` or manually cleaning up resources.
-
-### 3. Pick a Default Learning Region
-
-AWS has many Regions. While learning, it is easier to choose one default Region and keep your resources there.
-
-I would choose a Region that:
-
-- Has acceptable latency from where I work;
-- Supports the common services I want to learn;
-- Appears often in documentation and community examples;
-- Is easy for me to remember and use consistently.
-
-For example, you might start with a common Region such as `ap-southeast-1`, `ap-northeast-1`, or `us-east-1`. The exact choice depends on your network, service availability, and cost.
-
-In later examples, we will make the Region a variable instead of scattering it through every resource.
-
-## 3. The First Terraform Mental Model
-
-Before looking at syntax, Terraform's workflow can be understood like this:
-
-```mermaid
-flowchart LR
-    A["Write Terraform configuration<br/>*.tf"] --> B["terraform init<br/>download providers"]
-    B --> C["terraform plan<br/>preview changes"]
-    C --> D["terraform apply<br/>execute changes"]
-    D --> E["Real AWS resources"]
-    D --> F["Terraform State<br/>resource mapping"]
-    E --> C
-    F --> C
-```
-
-The diagram has three important pieces.
-
-The first is **configuration**. In `.tf` files, you declare what you want: an S3 bucket, an EC2 instance, a VPC, and so on.
-
-The second is **real infrastructure**. Terraform eventually calls AWS APIs to create, update, or delete those resources.
-
-The third is **state**. Terraform needs to remember how a resource in your code maps to a real object in AWS.
-
-Beginners often focus only on configuration, but state is where Terraform becomes powerful and where many pitfalls live.
-
-## 4. Terraform Is Not Just a Cloud Resource Generator
-
-If you think of Terraform only as a command-line tool that creates cloud resources, it will soon become confusing.
-
-For example:
-
-- Why does Terraform detect a difference if I change a resource manually in the AWS console?
-- Why can deleting a block of configuration delete a real cloud resource?
-- Why should I not casually delete `.tfstate`?
-- Why is local state a problem when multiple people collaborate?
-- Why should the same module receive different variables in different environments?
-
-These questions all point to the same core idea: Terraform converges desired state and real state.
-
-Your configuration describes the desired state. Existing AWS resources are the real state. Terraform uses providers and state to compare them, then produces an execution plan.
-
-That is why you should carefully read `terraform plan` before every apply.
-
-`plan` is not a ritual. It is Terraform giving you a chance to review infrastructure change before it happens.
-
-## 5. The Learning Path for This Series
-
-I plan to study and write in this order:
+For beginners, it helps to separate two layers:
 
 ```mermaid
 flowchart TB
-    A["Account safety and cost guardrails"] --> B["Terraform install and first resource"]
-    B --> C["HCL language basics"]
-    C --> D["State and remote backends"]
-    D --> E["IAM permission model"]
-    E --> F["VPC networking basics"]
-    F --> G["EC2 and secure access"]
-    G --> H["Modules and environments"]
-    H --> I["Import, checks, and CI/CD"]
+    A["Terraform itself"] --> A1["HCL configuration language"]
+    A --> A2["CLI workflow"]
+    A --> A3["Provider / Resource / Data Source"]
+    A --> A4["State and Plan"]
+    B["Concrete platforms"] --> B1["AWS"]
+    B --> B2["Docker"]
+    B --> B3["GitHub / Cloudflare / other SaaS"]
+    A --> B
 ```
 
-The series will roughly include:
+If you start with AWS immediately, you meet two knowledge systems at once:
 
-1. Before writing code, protect your new AWS account;
-2. What problem does IaC actually solve?
-3. First resource: start with an S3 bucket;
-4. HCL basics: variables, outputs, and expressions;
-5. State: Terraform's most important concept;
-6. Remote backend: store state in S3;
-7. IAM: run Terraform with least privilege;
-8. VPC: build a network from scratch;
-9. EC2: create a server with safer access;
-10. Modules: from working code to maintainable code;
-11. Multiple environments: dev, staging, and prod;
-12. Plan review: avoiding accidental destruction;
-13. Import: bringing manually created resources under Terraform;
-14. Static checks and security scanning;
-15. Automating Terraform with GitHub Actions;
-16. A complete small project to close the loop.
+- Terraform concepts;
+- AWS concepts such as accounts, Regions, IAM, VPC, billing, and security groups.
 
-The goal is not to cram every concept into one post. Each article should answer a few questions, include runnable examples, and clean up resources at the end.
+That is not wrong, but it is heavier. A gentler path is to run Terraform locally first, understand the core workflow, and then transfer that mental model to AWS.
 
-## 6. Starting Without Code Is Intentional
+## 2. How to Read the Official Documentation
 
-Many tutorials begin with `main.tf`, and that is a valid path. The official Terraform getting-started tutorials also move through installation, resource creation, resource management, and destruction.
+When learning Terraform, I recommend using HashiCorp's official documentation as the main map, not just following scattered blog posts.
 
-For this series, I want to fill in the context a real learner needs:
+These are the first pages worth bookmarking:
 
-- I just created an AWS account. What must be configured first?
-- How do I keep learning costs under control?
-- What is the relationship between Terraform and the AWS console?
-- Why should I avoid changing the same resource sometimes by hand and sometimes through Terraform?
-- Why does everyone keep saying state matters?
+- [Terraform Tutorials](https://developer.hashicorp.com/terraform/tutorials): the official tutorial hub, with AWS, Docker, GCP, Azure, HCP Terraform, and other tracks;
+- [Get Started - Docker](https://developer.hashicorp.com/terraform/tutorials/docker-get-started): a beginner path that does not require a cloud account;
+- [Get Started - AWS](https://developer.hashicorp.com/terraform/tutorials/aws-get-started): the official AWS beginner path once you have an AWS account;
+- [Terraform Language Documentation](https://developer.hashicorp.com/terraform/language): HCL, variables, outputs, modules, backends, state, and configuration references;
+- [Terraform CLI Documentation](https://developer.hashicorp.com/terraform/cli): authoritative docs for commands such as `init`, `plan`, `apply`, and `destroy`;
+- [Terraform State](https://developer.hashicorp.com/terraform/language/state): the official entry point for understanding state.
 
-Without those answers, writing Terraform feels like driving through fog.
+The official tutorials page is useful because it does not treat AWS as the only starting point. Docker, AWS, Azure, GCP, and HCP Terraform are presented as separate getting-started tracks. For readers without an AWS account, the Docker track is a very good first stop.
 
-In the next article, we will install Terraform and the AWS CLI, then use a low-risk resource to walk through:
+My suggested order:
+
+1. Read the Tutorials overview to see how the official learning material is organized;
+2. Follow the Docker getting-started path first, avoiding cloud cost at the beginning;
+3. Keep the CLI and Language documentation open so commands and syntax do not feel like magic copied from a tutorial;
+4. Move into AWS after `plan`, `apply`, and state begin to make sense.
+
+## 3. How to Learn Without an AWS Account
+
+If you do not have an AWS account right now, do not get stuck. You still have several good options.
+
+### Path A: Local Docker
+
+This is the best no-cloud beginner path.
+
+You need:
+
+- Terraform installed locally;
+- Docker installed locally;
+- The Terraform Docker provider to create, change, and destroy a container.
+
+This teaches:
+
+- How `terraform init` downloads providers;
+- How `.tf` files describe resources;
+- How `terraform plan` previews changes;
+- How `terraform apply` creates resources;
+- How `terraform destroy` removes resources;
+- How state records the mapping between configuration and a real object.
+
+The goal is to learn Terraform fundamentals, not Docker itself.
+
+### Path B: Pure Local Providers
+
+If you do not want to install Docker yet, you can still practice with providers that do not depend on a cloud platform, for example:
+
+- `random`: generate random strings, passwords, and IDs;
+- `local`: create local files;
+- `tls`: generate local certificate materials.
+
+This path does not simulate a real cloud architecture, but it is useful for understanding providers, resources, outputs, and state.
+
+For example, Terraform can generate a random project suffix and write it into a local file. That is a tiny experiment, but it is enough to observe how state changes.
+
+### Path C: HCP Terraform and Official Interactive Tutorials
+
+HashiCorp also provides interactive tutorials and HCP Terraform material. These are useful for understanding remote execution, remote state, and team collaboration.
+
+For complete beginners, I would still run a few local cycles first:
 
 ```bash
 terraform init
-terraform fmt
-terraform validate
 terraform plan
 terraform apply
 terraform destroy
 ```
 
-The goal of this first article is modest: understand what we are operating before we operate it.
+Once you have felt that loop in your own terminal, remote workflows are easier to understand.
+
+## 4. If You Already Have AWS, Do Not Rush to Apply
+
+If you already have an AWS account, you can move into the AWS hands-on posts later. Before creating resources, add a few guardrails.
+
+At minimum:
+
+- Enable MFA for the Root user;
+- Do not create access keys for the Root user;
+- Create a low AWS Budgets alert;
+- Choose one default learning Region;
+- Use a dedicated IAM identity for daily work instead of the Root user;
+- Confirm resources are destroyed after each experiment.
+
+AWS recommends avoiding Root user access for daily tasks and enabling MFA. Budget alerts cannot prevent every charge, but they can warn you early when something may have been left running.
+
+I will not expand all of this here. It deserves its own pre-AWS checklist before we start creating AWS resources.
+
+## 5. A Better Outline for This Series
+
+The new outline has four stages: learn Terraform itself, practice without a cloud account, move into AWS, and then engineer the workflow.
+
+```mermaid
+flowchart TB
+    A["Stage 1: Terraform itself"] --> B["Stage 2: Local experiments without cloud"]
+    B --> C["Stage 3: AWS hands-on basics"]
+    C --> D["Stage 4: Engineering and collaboration"]
+```
+
+### Stage 1: Terraform Itself
+
+1. **You can start without an AWS account**
+   - Terraform vs AWS
+   - Official documentation entry points
+   - No-cloud learning paths
+   - Full series outline
+
+2. **What problem does IaC actually solve?**
+   - Why console-clicking does not scale
+   - Declarative configuration
+   - Terraform vs scripts, CloudFormation, and CDK
+
+3. **Install Terraform and run the CLI workflow**
+   - Installation options
+   - `init / fmt / validate / plan / apply / destroy`
+   - `.terraform/` and the lock file
+
+4. **HCL basics: how Terraform configuration is written**
+   - Blocks, arguments, expressions
+   - Variables, locals, outputs
+   - Types, defaults, validation
+
+5. **Provider, Resource, and Data Source**
+   - How Terraform connects to external platforms
+   - Resources manage objects
+   - Data sources query existing information
+
+6. **State: Terraform's most underestimated core**
+   - What state records
+   - Why state should not be casually deleted
+   - Drift, refresh, and import intuition
+
+### Stage 2: Local Experiments Without Cloud
+
+7. **Use Docker for the first real resource**
+   - Create a container
+   - Change a port or image
+   - Observe plan and state
+   - Destroy the resource
+
+8. **Use local/random providers for variables and outputs**
+   - No cloud account required
+   - Generate a random name
+   - Write a local file
+   - Output useful values
+
+9. **First step into modules**
+   - Why modules exist
+   - How to design inputs and outputs
+   - When not to abstract too early
+
+### Stage 3: AWS Hands-On Basics
+
+10. **Account safety and cost guardrails before AWS**
+    - Root MFA
+    - Budgets
+    - Region
+    - IAM identity preparation
+
+11. **First AWS resource: start with an S3 bucket**
+    - AWS provider
+    - Low-risk resource
+    - Create, change, destroy
+
+12. **Manage IAM with Terraform without locking yourself out**
+    - IAM users, roles, policies
+    - Least privilege
+    - Prefer temporary credentials
+
+13. **Build a VPC from scratch**
+    - VPC, subnets, route tables, internet gateway
+    - Public and private subnets
+    - CIDR planning
+
+14. **Create an EC2 instance with safer access**
+    - AMI, instance type, security group
+    - SSH and SSM Session Manager
+    - Minimal security group exposure
+
+### Stage 4: Engineering and Collaboration
+
+15. **Remote state and collaboration**
+    - Problems with local state
+    - S3 backend or HCP Terraform
+    - State locking
+
+16. **Multiple environments**
+    - dev, staging, prod
+    - Workspace boundaries
+    - Directory isolation and variable files
+
+17. **Change review: learn to read plan carefully**
+    - Create, Update, Replace, Destroy
+    - `lifecycle`
+    - Preventing accidental destruction
+
+18. **Import: bring manual resources under Terraform**
+    - Why legacy resources exist
+    - Basic import workflow
+    - Completing configuration after import
+
+19. **Formatting, validation, and static checks**
+    - `fmt`, `validate`
+    - tflint
+    - checkov / tfsec
+
+20. **Automate Terraform with GitHub Actions**
+    - Run plan on pull requests
+    - Apply from main
+    - OIDC vs long-lived secrets
+
+21. **A complete small project**
+    - VPC + S3 + IAM + EC2
+    - README and destroy workflow
+    - Cost review
+
+This outline is longer than the first version, but the entry is gentler. Readers without AWS can follow the first nine posts. Readers with AWS should still benefit from the fundamentals before entering cloud practice.
+
+## 6. What to Do After This Post
+
+If you are starting from zero, do not register AWS immediately just because the series title mentions AWS. Do three smaller things first:
+
+1. Open [Terraform Tutorials](https://developer.hashicorp.com/terraform/tutorials) and look at the official tutorial map;
+2. Open [Get Started - Docker](https://developer.hashicorp.com/terraform/tutorials/docker-get-started) and confirm that you can start without a cloud account;
+3. Prepare Terraform and Docker locally so we can run the first local experiment in the next post.
+
+If you already have AWS, do not rush to create resources. Prepare Root MFA, a budget alert, and a default Region first. The earlier you build that habit, the less stressful cloud learning becomes.
+
+The principle for the rest of the series is simple: **explain Terraform first, then explain platform-specific details; build confidence with low-risk experiments, then move into real cloud resources.**
 
 ## References
 
-- [Terraform AWS Get Started](https://developer.hashicorp.com/terraform/tutorials/aws-get-started)
+- [Terraform Tutorials](https://developer.hashicorp.com/terraform/tutorials)
+- [Get Started - Docker](https://developer.hashicorp.com/terraform/tutorials/docker-get-started)
+- [Get Started - AWS](https://developer.hashicorp.com/terraform/tutorials/aws-get-started)
 - [Terraform Language Documentation](https://developer.hashicorp.com/terraform/language)
+- [Terraform CLI Documentation](https://developer.hashicorp.com/terraform/cli)
 - [Terraform State](https://developer.hashicorp.com/terraform/language/state)
 - [AWS Root user best practices](https://docs.aws.amazon.com/IAM/latest/UserGuide/root-user-best-practices.html)
 - [Creating a budget - AWS Cost Management](https://docs.aws.amazon.com/cost-management/latest/userguide/budgets-create.html)
