@@ -1,7 +1,7 @@
 ---
 title: "Terraform + AWS from Zero to Production (1): Before Writing Code, Protect Your New AWS Account"
 date: 2026-07-05T00:00:00+08:00
-draft: true
+draft: false
 summary: "Starting from a newly created AWS account, this post sets up the basic safety, cost, and mental-model guardrails before writing Terraform code."
 categories: ["tech"]
 tags: ["Terraform", "AWS", "IaC", "DevOps"]

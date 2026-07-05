@@ -1,7 +1,7 @@
 ---
 title: "Terraform + AWS 从零到工程化（一）：先别急着写代码，保护你的新 AWS 账号"
 date: 2026-07-05T00:00:00+08:00
-draft: true
+draft: false
 summary: "从一个刚创建的 AWS 账号出发，先建立安全、费用和 Terraform 学习的基本护栏，再开始真正写 IaC。"
 categories: ["tech"]
 tags: ["Terraform", "AWS", "IaC", "DevOps"]
